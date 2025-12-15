@@ -1,0 +1,49 @@
+# configs/phaseC_B_1_0_72.yaml
+# PhaseC-B: M3' (1_0_72 VAD aligned) + dummy pose + wav 同期テスト + debug CSV
+
+io:
+  assets_dir: "tests/assets_min"
+  out_dir: "tests/out"
+  exp_name: "phaseC_B_1_0_72"
+
+video:
+  width: 640
+  height: 640
+  fps: 25
+  # mouth_timeline / audio_ms ≒ 36,030ms なので 40秒程度に設定
+  duration_s: 40.0
+
+render:
+  crossfade_frames: 4
+
+inputs:
+  # ★ M3' VAD aligned 出力
+  mouth_timeline: "../timelines/1_0_72.mouth_timeline.attack40.i_v11.vad.json"
+
+  # ★ いまは dummy pose_timeline_yaw を使用
+  pose_timeline: "../timelines/pose_timeline_yaw.json"
+
+  # 必要になったら expression_timeline もここに追加
+  # expression_timeline: "../timelines/expression_phaseB_long.json"
+
+atlas:
+  # assets_dir 配下の atlas.min.json を使用
+  atlas_json: "atlas.min.json"
+
+transform:
+  enabled: true
+  roll_coef: 0.8
+  yaw_coef: 0.15
+  pitch_coef: 0.1
+
+audio:
+  # ★ 1_0_72 用 wav
+  wav_path: "../audio/1_0_72.wav"
+
+benchmark:
+  label: "phaseC_B_1_0_72"
+  record_frame_level: false
+
+# 🔍 デバッグ設定：t_msごとの mouth / yaw / pitch / roll を CSV に出力
+debug:
+  dump_timeline_csv: "debug/phaseC_B_1_0_72.timeline.csv"

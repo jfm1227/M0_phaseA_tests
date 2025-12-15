@@ -1,0 +1,35 @@
+{
+  "out_mp4": "/workspaces/M0_phaseA_tests/tests/out/phaseC_B_1_0_72/demo.mp4",
+  "raw_mp4": "/workspaces/M0_phaseA_tests/tests/out/phaseC_B_1_0_72/video_raw.mp4",
+  "fps": 25,
+  "duration_s": 40,
+  "frames": 1000,
+  "assets_dir": "/workspaces/M0_phaseA_tests/tests/assets_min",
+  "assets_dir_effective": "/workspaces/M0_phaseA_tests/tests/assets_min",
+  "exp_name": "phaseC_B_1_0_72",
+  "elapsed_s_render": 28.923,
+  "elapsed_s_total": 37.912,
+  "axis": "yaw",
+  "thr_front_deg": 16.0,
+  "map_deg": 30.0,
+  "labels": {
+    "zero": "front",
+    "neg": "left30",
+    "pos": "right30"
+  },
+  "view_alias": {},
+  "audio_name_cfg": "../audio/1_0_72.wav",
+  "audio_name_from_mouth": "1_0_72.wav",
+  "audio_path": "/workspaces/M0_phaseA_tests/tests/assets_min/../timelines/../audio/1_0_72.wav",
+  "audio_mux_succeeded": true,
+  "audio_mux_error": null,
+  "views": {
+    "front": 1000
+  },
+  "fallback_frames": 0,
+  "first_fallback_ms": null,
+  "total_frames": 1000,
+  "transform": {
+    "enabled": true
+  }
+}

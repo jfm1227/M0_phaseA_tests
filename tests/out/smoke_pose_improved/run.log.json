@@ -1,0 +1,33 @@
+{
+  "out_mp4": "/workspaces/M0_phaseA_tests/tests/out/smoke_pose_improved/video_raw.mp4",
+  "raw_mp4": "/workspaces/M0_phaseA_tests/tests/out/smoke_pose_improved/video_raw.mp4",
+  "fps": 25,
+  "duration_s": 38,
+  "frames": 950,
+  "assets_dir": "/workspaces/M0_phaseA_tests/tests/assets_min",
+  "assets_dir_effective": "/workspaces/M0_phaseA_tests/tests/assets_min",
+  "exp_name": "smoke_pose_improved",
+  "elapsed_s_render": 27.705,
+  "elapsed_s_total": 27.706,
+  "axis": "yaw",
+  "thr_front_deg": 16.0,
+  "map_deg": 30.0,
+  "labels": {
+    "zero": "front",
+    "neg": "left30",
+    "pos": "right30"
+  },
+  "view_alias": {},
+  "audio_name_cfg": null,
+  "audio_name_from_mouth": "1_0_72.wav",
+  "audio_path": null,
+  "audio_mux_succeeded": false,
+  "audio_mux_error": null,
+  "fallback_frames": 0,
+  "first_fallback_ms": null,
+  "views_count": {
+    "front": 921,
+    "right30": 29
+  },
+  "total_frames": 950
+}

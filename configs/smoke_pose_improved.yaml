@@ -1,0 +1,34 @@
+# configs/smoke_pose_improved.yaml
+io:
+  assets_dir: "tests/assets_min"
+  out_dir: "tests/out"
+  exp_name: "smoke_pose_improved"
+
+video:
+  width: 640
+  height: 640
+  fps: 25
+  duration_s: 38.0
+
+render:
+  crossfade_frames: 4
+
+inputs:
+  # ★ assets_dir(=tests/assets_min) からの相対にする（m0_runner仕様）
+  mouth_timeline: "../timelines/mouth_timeline_test1.json"
+  pose_timeline:  "../timelines/pose_timeline_m0_3.json"
+  # expression_timeline: "../timelines/expression_phaseB_long.json"  # 任意
+
+atlas:
+  # ★ assets_dir からの相対（m0_runner仕様）
+  atlas_json: "atlas.min.json"
+
+transform:
+  enabled: true
+  roll_coef: 0.8
+  yaw_coef: 0.15
+  pitch_coef: 0.1
+
+benchmark:
+  label: "smoke_pose_improved"
+  record_frame_level: false

@@ -1,0 +1,54 @@
+# configs/phaseC_B_1_0_2.yaml
+# PhaseC-B Day1: M3' (1_0_2) + 実データ pose + wav 同期テスト用
+
+io:
+  assets_dir: "tests/assets_min"
+  out_dir: "tests/out"
+  exp_name: "phaseC_B_1_0_2"
+
+video:
+  width: 640
+  height: 640
+  fps: 25
+  # mouth_timeline / pose_timeline は ~54,000ms まであるので 55秒程度に設定
+  # （ffmpeg 側で -shortest を使うため多少長めでOK）
+  duration_s: 55.0
+
+render:
+  crossfade_frames: 4
+
+inputs:
+  # ★ M3' 出力（今回の 1_0_2.mouth_timeline.json）をここに置く想定
+  # 例: tests/timelines/1_0_2.mouth_timeline.json
+  mouth_timeline: "../timelines/1_0_2.mouth_timeline.i_test_v11.vad_aligned.json"
+
+  # ★ DLC→ETL で作った 1_0_2_pose_timeline.json
+  # 例: tests/timelines/1_0_2_pose_timeline.json
+  pose_timeline: "../timelines/pose_timeline_yaw.json"
+
+  # ★ とりあえず PhaseC-A と同じ長尺 expression を再利用
+  # （必要なら normal 固定版に差し替え可）
+  # expression_timeline: "../timelines/expression_phaseB_long.json"
+
+atlas:
+  # assets_dir 配下の atlas.min.json を使用（PhaseC-A と同じ）
+  atlas_json: "atlas.min.json"
+
+transform:
+  # PhaseC-A bench と同じ transform 設定を継承
+  enabled: true
+  roll_coef: 0.8
+  yaw_coef: 0.15
+  pitch_coef: 0.1
+
+# （metrics は未指定 → m0_runner 側のデフォルト値を使用: value_key="yaw" 等）
+
+audio:
+  # ★ wav の場所をここに指定
+  # 例: tests/audio/1_0_2.wav を作る場合
+  wav_path: "../audio/1_0_2.wav"
+
+benchmark:
+  # ラベルだけ PhaseC-B 用に変更
+  label: "phaseC_B_1_0_2"
+  record_frame_level: false
