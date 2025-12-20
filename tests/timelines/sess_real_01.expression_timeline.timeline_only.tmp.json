@@ -1,0 +1,86 @@
+[
+  {
+    "t_ms": 0,
+    "expression": "blink",
+    "source": "blink"
+  },
+  {
+    "t_ms": 120,
+    "expression": "normal",
+    "source": "blink_end_restore"
+  },
+  {
+    "t_ms": 15000,
+    "expression": "blink",
+    "source": "blink"
+  },
+  {
+    "t_ms": 15120,
+    "expression": "normal",
+    "source": "blink_end_restore"
+  },
+  {
+    "t_ms": 30000,
+    "expression": "blink",
+    "source": "blink"
+  },
+  {
+    "t_ms": 30120,
+    "expression": "normal",
+    "source": "blink_end_restore"
+  },
+  {
+    "t_ms": 37040,
+    "expression": "smile",
+    "emo_id": "1_2",
+    "source": "emo_map",
+    "utt_id": "1_0_73"
+  },
+  {
+    "t_ms": 45000,
+    "expression": "blink",
+    "source": "blink"
+  },
+  {
+    "t_ms": 45120,
+    "expression": "smile",
+    "source": "blink_end_restore"
+  },
+  {
+    "t_ms": 60000,
+    "expression": "blink",
+    "source": "blink"
+  },
+  {
+    "t_ms": 60120,
+    "expression": "smile",
+    "source": "blink_end_restore"
+  },
+  {
+    "t_ms": 62080,
+    "expression": "angry",
+    "emo_id": "2_1",
+    "source": "emo_map",
+    "utt_id": "1_0_74"
+  },
+  {
+    "t_ms": 75000,
+    "expression": "blink",
+    "source": "blink"
+  },
+  {
+    "t_ms": 75120,
+    "expression": "angry",
+    "source": "blink_end_restore"
+  },
+  {
+    "t_ms": 90000,
+    "expression": "blink",
+    "source": "blink"
+  },
+  {
+    "t_ms": 90120,
+    "expression": "angry",
+    "source": "blink_end_restore"
+  }
+]

@@ -5,8 +5,8 @@ io:
   exp_name: "smoke_pose_improved"
 
 video:
-  width: 640
-  height: 640
+  width: 720
+  height: 720
   fps: 25
   duration_s: 38.0
 
@@ -16,8 +16,8 @@ render:
 inputs:
   # ★ assets_dir(=tests/assets_min) からの相対にする（m0_runner仕様）
   mouth_timeline: "../timelines/mouth_timeline_test1.json"
-  pose_timeline:  "../timelines/pose_timeline_m0_3.json"
-  # expression_timeline: "../timelines/expression_phaseB_long.json"  # 任意
+  pose_timeline:  "../timelines/pose_timeline_m0_yaw30_3.json"
+  expression_timeline: "../timelines/sess_real_01.expression_timeline.json"  # 任意
 
 atlas:
   # ★ assets_dir からの相対（m0_runner仕様）
