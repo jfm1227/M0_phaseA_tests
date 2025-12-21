@@ -8,7 +8,7 @@ video:
   width: 720
   height: 720
   fps: 25
-  duration_s: 38.0
+  duration_s: 10.0
 
 render:
   crossfade_frames: 4
@@ -32,3 +32,6 @@ transform:
 benchmark:
   label: "smoke_pose_improved"
   record_frame_level: false
+
+debug:
+  dump_rgba_dir: "out/fg_rgba"

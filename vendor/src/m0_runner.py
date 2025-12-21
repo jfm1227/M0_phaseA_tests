@@ -147,7 +147,7 @@ def _rewrite_atlas_for_alias(base_atlas_path: Path, tmp_assets_dir: Path, view_a
     """
     atlas.min.json 内の全パス文字列に対し、view_aliasに基づく置換を施した
     「別名対応版atlas」を生成して返す。
-    - 例: {"left30":"down15"} → "/left30/" を "/down15/" に
+    - 例: {"left30":"down15"} → "/left30/" に "/down15/" に
     """
     pairs = {}
     for dst, src in view_alias.items():
@@ -174,11 +174,6 @@ def _rewrite_atlas_for_alias(base_atlas_path: Path, tmp_assets_dir: Path, view_a
 def _import_timeline_and_render():
     """
     Timeline / render_video の import を環境に応じて切り替える。
-
-    優先順（落ちにくい順）:
-    - A: プロジェクト直下に src/ がある（python -m src.m0_runner など）
-    - B: repo root を PYTHONPATH に入れて vendor.src.* で引ける
-    - C: vendor/src/ ディレクトリを直接叩く（同じディレクトリからローカルimport）
     """
     try:
         from src.timeline import Timeline
@@ -194,7 +189,7 @@ def _import_timeline_and_render():
     except ModuleNotFoundError:
         pass
 
-    # 最後の砦（vendor/src を current dir として実行したとき）
+    # 最後の砦
     from timeline import Timeline
     from render_core import render_video_legacy as render_video
     return Timeline, render_video
@@ -204,12 +199,6 @@ def _import_timeline_and_render():
 # -----------------------------
 def _build_merged_value_fn(mouth_tl, pose_tl, expr_tl,
                            value_key: str, thr_front: float, map_deg: float):
-    """
-    value_key が yaw 以外（pitch/roll）の場合、擬似yaw（±map_deg or 0）を注入して返す。
-
-    ※M3' からは mouth_id(0..5) が来る想定なので、
-      ここで mouth ラベル("close/a/i/u/e/o") に変換して M0 に渡す。
-    """
     MOUTH_LABELS = ["close", "a", "i", "u", "e", "o"]
 
     def merged_value(t_ms: int) -> Dict[str, Any]:
@@ -218,7 +207,6 @@ def _build_merged_value_fn(mouth_tl, pose_tl, expr_tl,
         vals.update(pose_tl.value_at(t_ms))
         vals.update(expr_tl.value_at(t_ms))
 
-        # --- mouth_id -> mouth ラベル変換 ---
         if "mouth_id" in vals and "mouth" not in vals:
             try:
                 mid = int(vals["mouth_id"])
@@ -229,7 +217,6 @@ def _build_merged_value_fn(mouth_tl, pose_tl, expr_tl,
             else:
                 vals["mouth"] = "close"
 
-        # --- ここから下は従来どおり（擬似yaw注入） ---
         if value_key == "yaw":
             return vals
 
@@ -265,8 +252,6 @@ def _resolve_audio_path(audio_name: str | None,
     if cand.is_absolute() and cand.exists():
         return cand
 
-    # repo_root/tests/audio を探索に追加（標準配置）
-    # vendor/src/m0_runner.py から repo root を推定
     repo_root = Path(__file__).resolve().parents[2]
     tests_audio_dir = repo_root / "tests" / "audio"
 
@@ -277,9 +262,6 @@ def _resolve_audio_path(audio_name: str | None,
 
     return None
 
-# -----------------------------
-# audio 長さ計測（wav）
-# -----------------------------
 def _get_wav_duration_ms(wav_path: Path) -> int | None:
     try:
         with wave.open(str(wav_path), "rb") as wf:
@@ -314,7 +296,6 @@ def main():
     duration_s  = float(cfg["video"]["duration_s"])
     crossfade   = int(cfg["render"]["crossfade_frames"])
 
-    # ---- 尺・フレーム数の「正」ログ（ここが最重要）----
     step_ms = int(round(1000.0 / fps))
     target_ms = int(round(duration_s * 1000.0))
     target_frames = int(round(duration_s * fps))
@@ -322,41 +303,35 @@ def main():
     print(f"  fps={fps} step_ms={step_ms}")
     print(f"  duration_s={duration_s} target_ms={target_ms} target_frames={target_frames}")
 
-    # メトリクス・切替設定（Option A：alias＋atlas書き換え）
     mconf       = cfg.get("metrics", {}) or {}
-    value_key   = str(mconf.get("value_key", "yaw"))     # "yaw" / "pitch" / "roll"
-    thr_front   = float(mconf.get("thr_front", 16.0))    # ±閾値[deg]
-    zero_label  = str(mconf.get("zero_label", "front"))  # ラベル（ログ用）
+    value_key   = str(mconf.get("value_key", "yaw"))
+    thr_front   = float(mconf.get("thr_front", 16.0))
+    zero_label  = str(mconf.get("zero_label", "front"))
     neg_label   = str(mconf.get("neg_label",  "left30"))
     pos_label   = str(mconf.get("pos_label",  "right30"))
-    map_deg     = float(mconf.get("map_deg", 30.0))      # 擬似yawの±度数
-    view_alias  = dict(mconf.get("view_alias", {}))      # {"left30":"down15","right30":"up15",...}
+    map_deg     = float(mconf.get("map_deg", 30.0))
+    view_alias  = dict(mconf.get("view_alias", {}))
 
-    # transform 設定（render_core へ透過）
     transform_cfg = cfg.get("transform")
 
-    # pitch/roll で alias 未指定なら既定補完
     if value_key != "yaw" and not view_alias:
         if value_key == "pitch":
             view_alias = {"left30": "down15", "right30": "up15", "front": "front"}
         else:
             view_alias = {"front": "front", "left30": "left30", "right30": "right30"}
 
-    # パス解決ヘルパ（assets_dir からの相対パスを絶対化）
     def _abs_assets(p: str) -> str:
         return p if os.path.isabs(p) else str(assets_dir / p)
 
-    # タイムライン読み込み
     Timeline, render_video = _import_timeline_and_render()
     inputs = cfg.get("inputs", {})
 
-    # ---- 追加ログ用に raw を保持 ----
     raw_mouth = None
     raw_pose = None
     raw_expr = None
 
     mouth_path = None
-    mouth_tl = Timeline([])  # デフォルト空タイムライン
+    mouth_tl = Timeline([])
     audio_name_from_mouth = None
 
     if "mouth_timeline" in inputs:
@@ -364,10 +339,8 @@ def main():
         raw_txt = mouth_path.read_text(encoding="utf-8")
         raw = json.loads(raw_txt)
         raw_mouth = raw
-
         if isinstance(raw, dict):
             audio_name_from_mouth = raw.get("audio")
-
         if isinstance(raw, dict) and "frames" in raw:
             frames = raw.get("frames") or []
             tmp_path = mouth_path.parent / (mouth_path.stem + ".frames_only.tmp.json")
@@ -378,28 +351,22 @@ def main():
         else:
             mouth_tl = Timeline([])
 
-    # pose_timeline 読み込み（wrapper両対応）
     if "pose_timeline" in inputs:
         pose_path = Path(_abs_assets(inputs["pose_timeline"]))
         raw_txt = pose_path.read_text(encoding="utf-8")
         raw = json.loads(raw_txt)
         raw_pose = raw
-
-        # meta.scale_mode ログ（混在事故予防）
         _log_meta_scale_mode("pose", raw)
-
         if isinstance(raw, dict) and "timeline" in raw:
             frames = raw.get("timeline") or []
             tmp_path = pose_path.parent / (pose_path.stem + ".timeline_only.tmp.json")
             tmp_path.write_text(json.dumps(frames, ensure_ascii=False, indent=2), encoding="utf-8")
             pose_tl = Timeline.load_json(str(tmp_path))
-
         elif isinstance(raw, dict) and "frames" in raw:
             frames = raw.get("frames") or []
             tmp_path = pose_path.parent / (pose_path.stem + ".frames_only.tmp.json")
             tmp_path.write_text(json.dumps(frames, ensure_ascii=False, indent=2), encoding="utf-8")
             pose_tl = Timeline.load_json(str(tmp_path))
-
         elif isinstance(raw, list):
             pose_tl = Timeline.load_json(str(pose_path))
         else:
@@ -407,13 +374,11 @@ def main():
     else:
         pose_tl = Timeline([])
 
-    # expression_timeline 読み込み（dict.timeline もOK）
     if "expression_timeline" in inputs:
         expr_path = Path(_abs_assets(inputs["expression_timeline"]))
         raw_txt = expr_path.read_text(encoding="utf-8")
         raw = json.loads(raw_txt)
         raw_expr = raw
-
         if isinstance(raw, dict) and "timeline" in raw:
             frames = raw.get("timeline") or []
             tmp_path = expr_path.parent / (expr_path.stem + ".timeline_only.tmp.json")
@@ -431,11 +396,9 @@ def main():
     else:
         expr_tl = Timeline([])
 
-    # ---- last_t_ms / counts ログ（ここが長尺バグの即死ログ）----
     pose_last_t_ms = _infer_last_t_ms_from_raw(raw_pose)
     mouth_last_t_ms = _infer_last_t_ms_from_raw(raw_mouth)
     expr_last_t_ms = _infer_last_t_ms_from_raw(raw_expr)
-
     pose_n = _count_frames_from_raw(raw_pose)
     mouth_n = _count_frames_from_raw(raw_mouth)
     expr_n = _count_frames_from_raw(raw_expr)
@@ -444,21 +407,11 @@ def main():
     print(f"  mouth_last_t_ms={mouth_last_t_ms} (n={mouth_n})")
     print(f"  expr_last_t_ms={expr_last_t_ms} (n={expr_n})")
 
-    # audio 設定：config > mouth_timeline.json 内の "audio"
     audio_cfg = cfg.get("audio", {}) or {}
     audio_name_cfg = audio_cfg.get("wav_path")
     audio_name = audio_name_cfg or audio_name_from_mouth
+    audio_path = _resolve_audio_path(audio_name, cfg, assets_dir=assets_dir, mouth_path=(mouth_path or cfg_path), config_path=cfg_path) if audio_name else None
 
-    # audio_name が決まったら、必ず _resolve_audio_path() の戻り値で audio_path を代入してから参照する
-    audio_path = _resolve_audio_path(
-        audio_name,
-        cfg,
-        assets_dir=assets_dir,
-        mouth_path=(mouth_path or cfg_path),
-        config_path=cfg_path,
-    ) if audio_name else None
-
-    # audio_ms（wav実長）を計測（WARNのみ・挙動不変）
     audio_ms = None
     if audio_path and audio_path.exists():
         audio_ms = _get_wav_duration_ms(audio_path)
@@ -469,12 +422,10 @@ def main():
     raw_mp4  = exp_dir / "video_raw.mp4"
     final_mp4 = exp_dir / "demo.mp4"
 
-    # assets の有効ディレクトリ（alias適用）
     use_assets_dir = assets_dir
     if value_key != "yaw" and view_alias:
         use_assets_dir = _mk_tmp_assets_with_alias(assets_dir, exp_dir, view_alias)
 
-    # atlas の有効パス（alias適用で深度置換）
     atlas_json_rel = cfg.get("atlas", {}).get("atlas_json", None)
     atlas_json_for_render = atlas_json_rel
     if atlas_json_rel and (value_key != "yaw") and view_alias:
@@ -484,59 +435,44 @@ def main():
         if base_atlas.exists():
             atlas_json_for_render = str(_rewrite_atlas_for_alias(base_atlas, use_assets_dir, view_alias))
 
-    # alias が無い通常ケースでも assets_dir を付ける
     if atlas_json_for_render:
         p = Path(atlas_json_for_render)
         if not p.is_absolute():
             atlas_json_for_render = str(use_assets_dir / atlas_json_for_render)
 
-    # 値マージ関数（擬似yaw注入）
-    merged_value = _build_merged_value_fn(
-        mouth_tl, pose_tl, expr_tl,
-        value_key=value_key, thr_front=thr_front, map_deg=map_deg
-    )
+    merged_value = _build_merged_value_fn(mouth_tl, pose_tl, expr_tl, value_key=value_key, thr_front=thr_front, map_deg=map_deg)
 
-    # デバッグ: timeline CSV のダンプ
     debug_cfg = cfg.get("debug", {})
     dump_csv_rel = debug_cfg.get("dump_timeline_csv")
-
     if dump_csv_rel:
         debug_root = out_dir / exp_name
         debug_path = debug_root / dump_csv_rel
         debug_path.parent.mkdir(parents=True, exist_ok=True)
-
-        total_frames = int(round(fps * duration_s))
-        fieldnames = [
-            "frame_index",
-            "t_ms",
-            "mouth",
-            "mouth_id",
-            "yaw",
-            "yaw_deg",
-            "pitch_deg",
-            "roll_deg",
-            "expression",
-        ]
-
+        total_frames_cnt = int(round(fps * duration_s))
+        fieldnames = ["frame_index", "t_ms", "mouth", "mouth_id", "yaw", "yaw_deg", "pitch_deg", "roll_deg", "expression"]
         with debug_path.open("w", newline="", encoding="utf-8") as f_csv:
-            writer = csv.DictWriter(f_csv, fieldnames=fieldnames)
-            writer.writeheader()
-
-            for fi in range(total_frames):
-                t_ms = int(round(fi * 1000 / fps))
-                vals = merged_value(t_ms)
-
-                writer.writerow({
+            writer_csv = csv.DictWriter(f_csv, fieldnames=fieldnames)
+            writer_csv.writeheader()
+            for fi in range(total_frames_cnt):
+                t_ms_cur = int(round(fi * 1000 / fps))
+                vals_cur = merged_value(t_ms_cur)
+                writer_csv.writerow({
                     "frame_index": fi,
-                    "t_ms": t_ms,
-                    "mouth": vals.get("mouth"),
-                    "mouth_id": vals.get("mouth_id"),
-                    "yaw": vals.get("yaw"),
-                    "yaw_deg": vals.get("yaw_deg"),
-                    "pitch_deg": vals.get("pitch_deg"),
-                    "roll_deg": vals.get("roll_deg"),
-                    "expression": vals.get("expression") or vals.get("exp") or vals.get("label"),
+                    "t_ms": t_ms_cur,
+                    "mouth": vals_cur.get("mouth"),
+                    "mouth_id": vals_cur.get("mouth_id"),
+                    "yaw": vals_cur.get("yaw"),
+                    "yaw_deg": vals_cur.get("yaw_deg"),
+                    "pitch_deg": vals_cur.get("pitch_deg"),
+                    "roll_deg": vals_cur.get("roll_deg"),
+                    "expression": vals_cur.get("expression") or vals_cur.get("exp") or vals_cur.get("label"),
                 })
+
+    # ★ 修正: dump_rgba_dir を config から取得して絶対パス化 ★
+    dump_rgba_dir_rel = (cfg.get("debug", {}) or {}).get("dump_rgba_dir")
+    dump_rgba_dir_abs = None
+    if dump_rgba_dir_rel:
+        dump_rgba_dir_abs = str(exp_dir / dump_rgba_dir_rel)
 
     # レンダリング本体
     t0 = time.time()
@@ -547,118 +483,67 @@ def main():
         assets_dir=str(use_assets_dir),
         atlas_json_rel=atlas_json_for_render,
         transform_cfg=transform_cfg,
+        dump_rgba_dir=dump_rgba_dir_abs,  # ★追加★
     )
     render_elapsed = round(time.time() - t0, 3)
 
-    # stats から rendered_frames を拾ってログ（無ければ duration_s*fps を採用）
     rendered_frames = None
     if isinstance(stats, dict):
-        rendered_frames = stats.get("rendered_frames") or stats.get("frames") or None
+        rendered_frames = stats.get("rendered_frames") or stats.get("frames") or stats.get("total_frames")
     if rendered_frames is None:
         rendered_frames = int(round(duration_s * fps))
 
     print("[len]")
     print(f"  rendered_frames={rendered_frames}")
 
-    # audio_ms vs render duration をログ（WARNのみ・挙動不変）
     if audio_ms is not None:
         duration_ms = int(round(duration_s * 1000))
         delta_ms = audio_ms - duration_ms
-
         print("[audio]")
         print(f"  audio_path={audio_path}")
         print(f"  audio_ms={audio_ms} duration_ms={duration_ms} delta_ms={delta_ms}")
-
         if abs(delta_ms) > step_ms:
-            print(
-                "[audio][WARN] audio duration differs from render duration "
-                f"(>|step_ms|={step_ms}ms). "
-                "OK for now; session integration should use audio_ms as source of truth."
-            )
+            print(f"[audio][WARN] audio duration differs from render duration (>|step_ms|={step_ms}ms).")
 
-    # audio mux（ffmpeg）
+    # audio mux
     mux_succeeded = False
     mux_error = None
-
     if audio_path and audio_path.exists():
         try:
-            cmd = [
-                "ffmpeg", "-y",
-                "-i", str(raw_mp4),
-                "-i", str(audio_path),
-                "-c:v", "copy",
-                "-c:a", "aac",
-                "-shortest",
-                str(final_mp4),
-            ]
+            cmd = ["ffmpeg", "-y", "-i", str(raw_mp4), "-i", str(audio_path), "-c:v", "copy", "-c:a", "aac", "-shortest", str(final_mp4)]
             subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             mux_succeeded = True
         except Exception as e:
             mux_error = str(e)
-
     if not mux_succeeded:
-        try:
-            shutil.move(str(raw_mp4), str(final_mp4))
-        except Exception:
-            pass
+        try: shutil.move(str(raw_mp4), str(final_mp4))
+        except: pass
 
     total_elapsed = round(time.time() - t0, 3)
-
-    # ログ
     run_log = {
         "out_mp4": str(final_mp4),
         "raw_mp4": str(raw_mp4),
         "fps": fps,
-        "step_ms": step_ms,
         "duration_s": duration_s,
-        "target_ms": target_ms,
-        "target_frames": target_frames,
-        "audio_ms": audio_ms,
-        "duration_ms": int(round(duration_s * 1000)),
-        "audio_delta_ms": (audio_ms - int(round(duration_s * 1000))) if audio_ms is not None else None,
         "rendered_frames": int(rendered_frames),
         "pose_last_t_ms": pose_last_t_ms,
         "mouth_last_t_ms": mouth_last_t_ms,
         "expr_last_t_ms": expr_last_t_ms,
-        "pose_n": pose_n,
-        "mouth_n": mouth_n,
-        "expr_n": expr_n,
         "assets_dir": str(assets_dir),
-        "assets_dir_effective": str(use_assets_dir),
         "exp_name": exp_name,
         "elapsed_s_render": render_elapsed,
         "elapsed_s_total": total_elapsed,
-        "axis": value_key,
-        "thr_front_deg": thr_front,
-        "map_deg": map_deg,
-        "labels": {"zero": zero_label, "neg": neg_label, "pos": pos_label},
-        "view_alias": view_alias,
-        "audio_name_cfg": audio_name_cfg,
-        "audio_name_from_mouth": audio_name_from_mouth,
-        "audio_path": str(audio_path) if audio_path else None,
         "audio_mux_succeeded": mux_succeeded,
-        "audio_mux_error": mux_error,
-        "atlas_json_for_render": atlas_json_for_render,
+        "dump_rgba_dir": dump_rgba_dir_abs, # ログにも残す
     }
-    if stats:
-        run_log.update(stats)
-
+    if stats: run_log.update(stats)
     (exp_dir / "run.log.json").write_text(json.dumps(run_log, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    # summary.csv（簡易）
-    summary_keys = [
-        "exp_name", "duration_s", "elapsed_s_render", "elapsed_s_total",
-        "target_frames", "rendered_frames", "pose_last_t_ms", "mouth_last_t_ms", "expr_last_t_ms",
-        "fallback_frames", "first_fallback_ms"
-    ]
+    summary_keys = ["exp_name", "duration_s", "elapsed_s_render", "elapsed_s_total", "rendered_frames", "fallback_frames"]
     with (exp_dir / "summary.csv").open("w", encoding="utf-8") as f:
         f.write("key,value\n")
         for k in summary_keys:
-            if k in run_log:
-                f.write(f"{k},{run_log[k]}\n")
-        views = run_log.get("views", {})
-        for name, count in views.items():
-            f.write(f"views_{name},{count}\n")
+            if k in run_log: f.write(f"{k},{run_log[k]}\n")
 
 if __name__ == "__main__":
     main()

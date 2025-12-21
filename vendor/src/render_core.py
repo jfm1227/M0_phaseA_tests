@@ -1,46 +1,41 @@
 from __future__ import annotations
-
-import os
-import json
-from typing import Dict, Any, Tuple
+import os, json
+from typing import Dict, Any
 import numpy as np
 import cv2
 
-# ============================================================
-# Image I/O
-# ============================================================
-
+# -----------------------------
+# 画像I/Oユーティリティ
+# -----------------------------
 def _load_rgba(path: str) -> np.ndarray:
-    """PNG などを BGRA で読む。アルファ無しなら 255 で補完。"""
+    """PNGなどを BGRA で読む。アルファ無しなら255で補完。"""
     if not os.path.exists(path):
         raise FileNotFoundError(path)
     img = cv2.imread(path, cv2.IMREAD_UNCHANGED)
     if img is None:
         raise FileNotFoundError(path)
-    if img.ndim != 3:
-        raise ValueError(f"Unsupported image ndim: {img.ndim} ({path})")
     if img.shape[2] == 3:
         bgr = img
         a = np.full((img.shape[0], img.shape[1], 1), 255, dtype=np.uint8)
         img = np.concatenate([bgr, a], axis=2)
-    elif img.shape[2] != 4:
-        raise ValueError(f"Unsupported channel count: {img.shape[2]} ({path})")
     return img
 
 
 def _ensure_bgra(img: np.ndarray) -> np.ndarray:
-    """BGR/BGRA/GRAY を BGRA に揃える。"""
+    """BGR/BGRA/GRAY などを BGRA に揃える。"""
     if img.ndim == 2:
-        return cv2.cvtColor(img, cv2.COLOR_GRAY2BGRA)
-    if img.ndim == 3 and img.shape[2] == 3:
-        return cv2.cvtColor(img, cv2.COLOR_BGR2BGRA)
-    if img.ndim == 3 and img.shape[2] == 4:
-        return img
-    raise ValueError(f"Unsupported img shape: {img.shape}")
+        img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGRA)
+    elif img.shape[2] == 3:
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2BGRA)
+    elif img.shape[2] == 4:
+        pass
+    else:
+        raise ValueError(f"Unsupported img shape: {img.shape}")
+    return img
 
 
 def _alpha_paste(canvas_bgra: np.ndarray, src_bgra: np.ndarray, cx: int, cy: int) -> None:
-    """src をアルファブレンドで canvas に貼り付ける（両方 BGRA）。"""
+    """src をアルファブレンドで canvas に貼り付ける。両方 BGRA 前提。"""
     h, w = canvas_bgra.shape[:2]
     sh, sw = src_bgra.shape[:2]
 
@@ -68,44 +63,39 @@ def _alpha_paste(canvas_bgra: np.ndarray, src_bgra: np.ndarray, cx: int, cy: int
     alpha = src_crop[:, :, 3:4].astype(np.float32) / 255.0
     inv = 1.0 - alpha
 
-    dst_crop[:, :, :3] = (
-        src_crop[:, :, :3].astype(np.float32) * alpha +
-        dst_crop[:, :, :3].astype(np.float32) * inv
-    ).astype(np.uint8)
+    dst_crop[:, :, :3] = (src_crop[:, :, :3].astype(np.float32) * alpha +
+                          dst_crop[:, :, :3].astype(np.float32) * inv).astype(np.uint8)
 
     dst_crop[:, :, 3:4] = np.clip(
-        src_crop[:, :, 3:4].astype(np.float32) +
-        dst_crop[:, :, 3:4].astype(np.float32) * inv,
+        src_crop[:, :, 3:4].astype(np.float32) + dst_crop[:, :, 3:4].astype(np.float32) * inv,
         0, 255
     ).astype(np.uint8)
 
     canvas_bgra[dy0:dy1, dx0:dx1] = dst_crop
 
 
-# ============================================================
-# Mouth label normalize
-# ============================================================
-
+# -----------------------------
+# 口形名 正規化
+# -----------------------------
 def normalize_mouth_label(mouth: str) -> str:
     if not mouth:
         return "closed"
-    m = str(mouth).lower()
+    m = mouth.lower()
     if m in ("close", "mouth_close"):
         return "closed"
     return m
 
 
-# ============================================================
-# Atlas load (expression meta passthrough)
-# ============================================================
-
+# -----------------------------
+# atlas 読み込み（★expressionメタも素通し）
+# -----------------------------
 def load_atlas_index(atlas_json_path: str) -> Dict[str, Any]:
     """
-    atlas.min.json を内部形式に正規化する。
+    atlas.min.json の実体を内部形式に正規化する。
 
-    - 旧形式（トップレベルに front/left30/...）もサポート
-    - data["views"][view][mouth] で参照できる
-    - expression_labels / expression_default などは素通し
+    - トップレベルに front/left30/right30/... がある旧形式もサポート
+    - data["views"][view][mouth] で必ず参照できるようにする
+    - expression_labels / expression_default などはそのまま返す
     """
     with open(atlas_json_path, "r", encoding="utf-8") as f:
         data = json.load(f)
@@ -114,28 +104,33 @@ def load_atlas_index(atlas_json_path: str) -> Dict[str, Any]:
     if not isinstance(views, dict):
         views = {}
         for key, value in data.items():
+            # front / left30 / right30 ... のようなビュー辞書を拾う
             if isinstance(value, dict) and "closed" in value:
+                # mouthキーは小文字に統一
                 views[key] = {str(m).lower(): path for m, path in value.items()}
         data["views"] = views
     else:
+        # mouthキーを小文字に揃えておく
         norm_views = {}
         for vname, vdict in views.items():
             if isinstance(vdict, dict):
                 norm_views[vname] = {str(m).lower(): path for m, path in vdict.items()}
         data["views"] = norm_views
 
+    # view_rules はそのまま
     if "view_rules" not in data:
         data["view_rules"] = {}
+
+    # fallback はそのまま
     if "fallback" not in data:
         data["fallback"] = {"view": "front", "mouth": "closed"}
 
     return data
 
 
-# ============================================================
-# View selection
-# ============================================================
-
+# -----------------------------
+# view 選択
+# -----------------------------
 def choose_view_from_yaw(yaw_deg: float, view_rules: Dict[str, Any]) -> str:
     left_max = float(view_rules.get("left30_max_yaw_deg", -12.0))
     right_min = float(view_rules.get("right30_min_yaw_deg", 12.0))
@@ -146,14 +141,14 @@ def choose_view_from_yaw(yaw_deg: float, view_rules: Dict[str, Any]) -> str:
     return "front"
 
 
-# ============================================================
-# Sprite path resolve (+expression derived path)
-# ============================================================
-
-def _resolve_base_sprite_path(atlas_idx: Dict[str, Any], view: str, mouth: str) -> Tuple[str | None, bool]:
+# -----------------------------
+# sprite path 解決
+# -----------------------------
+def _resolve_base_sprite_path(atlas_idx: Dict[str, Any], view: str, mouth: str) -> tuple[str | None, bool]:
     """
-    atlas_idx['views'][view][mouth] を引く。無ければ fallback。
-    returns: (path_rel or None, used_fallback)
+    atlas_idx['views'][view][mouth] を引いて、相対パスを返す。
+    見つからなければ fallback を使う。
+    戻り値: (path_rel or None, used_fallback: bool)
     """
     views = atlas_idx.get("views", {})
     used_fallback = False
@@ -164,6 +159,7 @@ def _resolve_base_sprite_path(atlas_idx: Dict[str, Any], view: str, mouth: str) 
         if isinstance(p, str):
             return p, used_fallback
 
+    # fallback view/mouth
     fb = atlas_idx.get("fallback", {})
     fb_view = str(fb.get("view", "front"))
     fb_mouth = normalize_mouth_label(str(fb.get("mouth", "closed")))
@@ -186,19 +182,21 @@ def _derive_expression_path(
     base_path_rel: str,
 ) -> str:
     """
-    assets_dir/<expr>_<view>/<basename.png> を導出。
-    - expression None / normal → base を返す
-    - expression_labels に無いラベル → base を返す
+    expression ラベルとベースPNGパスから、
+    assets_dir/<expr>_<view>/<mouth_xxx.png> を導出する。
+
+    - expression が None の場合や "normal" の場合は base_path_rel をそのまま返す
+    - expression_labels に含まれないラベルなら無視して base_path_rel を返す
     """
     expr_default = str(atlas_idx.get("expression_default", "normal")).lower()
-    expr = (expression or expr_default)
-    expr = str(expr).lower()
+    expr = (expression or expr_default).lower()
 
     if expr in ("", "normal"):
         return base_path_rel
 
     labels = [str(x).lower() for x in atlas_idx.get("expression_labels", [])]
     if labels and expr not in labels:
+        # 未知のラベル → normal と同じ扱い
         return base_path_rel
 
     base_name = os.path.basename(base_path_rel)
@@ -207,86 +205,28 @@ def _derive_expression_path(
     return expr_path_rel.replace("\\", "/")
 
 
-# ============================================================
-# Pose transform: (center pivot) SCALE -> ROTATE, then caller TRANSLATE(tx/ty)
-# ============================================================
-
-def _warp_affine_keep_bounds(src: np.ndarray, M: np.ndarray) -> np.ndarray:
+# -----------------------------
+# 変形（yaw/pitch/roll）
+# -----------------------------
+def pose_transform(src_bgra: np.ndarray, yaw_deg: float, pitch_deg: float, roll_deg: float) -> np.ndarray:
     """
-    変換後にクリップしないよう、変換後の外接矩形サイズに合わせて出力サイズを拡張する。
-    src: BGRA
-    M: 2x3 affine mapping src -> dst (before bounds adjustment)
+    最小版：roll のみ回転（例）。yaw/pitch は将来拡張。
+    既存実装に合わせる（必要に応じてあなたの実装に置換OK）
     """
-    h, w = src.shape[:2]
-    corners = np.array([
-        [0, 0],
-        [w, 0],
-        [w, h],
-        [0, h],
-    ], dtype=np.float32).reshape(-1, 1, 2)
-
-    warped = cv2.transform(corners, M)  # (4,1,2)
-    xs = warped[:, 0, 0]
-    ys = warped[:, 0, 1]
-    min_x, max_x = float(xs.min()), float(xs.max())
-    min_y, max_y = float(ys.min()), float(ys.max())
-
-    out_w = int(np.ceil(max_x - min_x))
-    out_h = int(np.ceil(max_y - min_y))
-    out_w = max(1, out_w)
-    out_h = max(1, out_h)
-
-    # 平行移動を足して、出力座標を (0,0) 起点に寄せる
-    M_adj = M.copy()
-    M_adj[0, 2] -= min_x
-    M_adj[1, 2] -= min_y
-
-    dst = cv2.warpAffine(
-        src,
-        M_adj,
-        (out_w, out_h),
-        flags=cv2.INTER_LINEAR,
-        borderMode=cv2.BORDER_CONSTANT,
-        borderValue=(0, 0, 0, 0),
-    )
-    return dst
-
-
-def pose_transform(src_bgra: np.ndarray, yaw_deg: float, pitch_deg: float, roll_deg: float, scale: float) -> np.ndarray:
-    """
-    ★順序固定★: pivot(center) 기준으로 SCALE -> ROLL(rotate).
-    yaw/pitch は将来拡張（現時点は roll のみ適用）。
-    """
-    if src_bgra is None:
-        return src_bgra
-
-    # safety
-    s = float(scale)
-    if not np.isfinite(s):
-        s = 1.0
-    s = max(0.05, min(20.0, s))
-
-    r = float(roll_deg)
-    if not np.isfinite(r):
-        r = 0.0
-
-    if abs(r) < 1e-6 and abs(s - 1.0) < 1e-6:
+    # roll だけ反映する簡易実装（既存があるならそれを使ってOK）
+    if abs(roll_deg) < 1e-6:
         return src_bgra
 
     h, w = src_bgra.shape[:2]
     center = (w / 2.0, h / 2.0)
-
-    # OpenCV の getRotationMatrix2D は (scale+rotation) を中心基準で作る
-    M = cv2.getRotationMatrix2D(center, r, s)
-
-    # クリップしないように bounds を調整
-    return _warp_affine_keep_bounds(src_bgra, M)
+    M = cv2.getRotationMatrix2D(center, roll_deg, 1.0)
+    dst = cv2.warpAffine(src_bgra, M, (w, h), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT, borderValue=(0, 0, 0, 0))
+    return dst
 
 
-# ============================================================
-# Main renderer
-# ============================================================
-
+# -----------------------------
+# メインレンダラー
+# -----------------------------
 def render_video(
     pose_timeline: list[dict[str, Any]],
     mouth_timeline: list[dict[str, Any]] | None,
@@ -317,14 +257,17 @@ def render_video(
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
     writer = cv2.VideoWriter(out_mp4_path, fourcc, fps, (width, height))
 
+    # timeline index
     pose_idx = 0
     mouth_idx = 0
 
     fallback_frames = 0
     first_fallback_ms = None
     views_count: Dict[str, int] = {}
+
     prev_frame = None
 
+    # helper: current pose/mouth by t_ms (hold-last)
     def _get_vals_at(t_ms: int, tl: list[dict[str, Any]], idx: int) -> tuple[dict[str, Any], int]:
         if not tl:
             return {}, idx
@@ -332,16 +275,17 @@ def render_video(
             idx += 1
         return tl[idx], idx
 
-    step_ms = int(round(1000 / fps))
-
     for i in range(total):
         ok, bgr = cap.read()
         if not ok:
             break
 
+        step_ms = int(round(1000 / fps))
         t_ms = i * step_ms
+
         vals, pose_idx = _get_vals_at(t_ms, pose_timeline, pose_idx)
 
+        # mouth/expression
         mvals = {}
         if mouth_timeline:
             mvals, mouth_idx = _get_vals_at(t_ms, mouth_timeline, mouth_idx)
@@ -349,20 +293,24 @@ def render_video(
         mouth = normalize_mouth_label(str(mvals.get("mouth", "closed")))
         expression = mvals.get("expression", None)
 
+        # yaw/pitch/roll（deg）
         yaw = float(vals.get("yaw", vals.get("yaw_deg", 0.0)))
         pitch = float(vals.get("pitch", vals.get("pitch_deg", 0.0)))
         roll = float(vals.get("roll", vals.get("roll_deg", 0.0)))
 
         view = choose_view_from_yaw(yaw, view_rules)
+        views = atlas_idx.get("views", {})
         views_count[view] = views_count.get(view, 0) + 1
 
         used_fallback = False
         src = None
 
+        # 表情前提のベースPNGパスを解決
         base_path_rel, used_fallback_base = _resolve_base_sprite_path(atlas_idx, view, mouth)
         used_fallback = used_fallback or used_fallback_base
 
         if base_path_rel:
+            # expression 用にパスを上書き
             expr_path_rel = _derive_expression_path(
                 atlas_idx=atlas_idx,
                 view=view,
@@ -370,64 +318,76 @@ def render_video(
                 expression=expression,
                 base_path_rel=base_path_rel,
             )
+
+            # 実際の読み込み：まず expression 専用 → 無ければ normal(base) にフォールバック
             try:
-                src = _load_rgba(os.path.join(assets_dir, expr_path_rel))
+                asset_path = os.path.join(assets_dir, expr_path_rel)
+                src = _load_rgba(asset_path)
             except FileNotFoundError:
                 try:
-                    src = _load_rgba(os.path.join(assets_dir, base_path_rel))
-                    used_fallback = True  # 表情が無く normal に落ちた
+                    asset_path = os.path.join(assets_dir, base_path_rel)
+                    src = _load_rgba(asset_path)
+                    used_fallback = True  # 「表情」の意味ではフォールバック
                 except FileNotFoundError:
                     src = None
-                    used_fallback = True
         else:
+            # baseもexpressionも読めなかった場合
             used_fallback = True
 
         frame = _ensure_bgra(bgr)
 
         if src is not None:
-            # ---- 基準サイズ（target_h_ratio）に対して、pose.scale を掛ける ----
-            tgt_h_base = max(1, int(height * float(target_h_ratio)))
+            # リサイズ（pose の scale を反映）
+            # - target_h_ratio で「基準サイズ」を作り
+            # - vals['scale']（例: 0.95〜1.05）で最終倍率を掛ける
+            tgt_h_base = max(1, int(height * target_h_ratio))
 
             pose_scale = float(vals.get("scale", 1.0))
-            if not np.isfinite(pose_scale):
-                pose_scale = 1.0
-            pose_scale = max(0.2, min(5.0, pose_scale))  # clamp（必要なら調整）
+            # safety clamp（暴れ防止：必要なら調整）
+            pose_scale = max(0.5, min(2.0, pose_scale))
 
-            desired_h = max(1, int(round(tgt_h_base * pose_scale)))
+            tgt_h = max(1, int(round(tgt_h_base * pose_scale)))
 
-            # 「scale→回転」を sprite 側で完結させるため、src 高さ基準で scale を作る
-            scale_total = float(desired_h) / float(max(1, src.shape[0]))
+            # src→tgt のリサイズ倍率（ここは pose_scale とは別物）
+            resize_ratio = tgt_h / src.shape[0]
+            tgt_w = max(1, int(round(src.shape[1] * resize_ratio)))
+            src_rs = cv2.resize(src, (tgt_w, tgt_h), interpolation=cv2.INTER_AREA)
 
-            # ★中心基準で SCALE -> ROLL（tx/ty はこの後の貼り付けでのみ適用）★
-            src_tf = pose_transform(src, yaw_deg=yaw, pitch_deg=pitch, roll_deg=roll, scale=scale_total)
+            # ★ yaw/pitch/roll 変形をここで適用 ★
+            src_rs = pose_transform(src_rs, yaw_deg=yaw, pitch_deg=pitch, roll_deg=roll)
 
-            # ---- tx/ty は px 前提で、貼り付け中心にだけ反映（scaleに巻き込まれない）----
+            # paste position (apply tx/ty if present)
             tx = float(vals.get("tx", 0.0))
             ty = float(vals.get("ty", 0.0))
-            if not np.isfinite(tx):
-                tx = 0.0
-            if not np.isfinite(ty):
-                ty = 0.0
 
+            # tx/ty clamp（画面外に飛ばないための安全策）
             max_tx = width * 0.45
             max_ty = height * 0.45
             tx = max(-max_tx, min(max_tx, tx))
             ty = max(-max_ty, min(max_ty, ty))
 
-            cx = int(round((width * 0.5) + tx))
+            # NOTE:
+            # - current assumption: tx/ty are pixels
+            # - if normalized later: cx += int(tx * width), cy += int(ty * height)
+            cx = int(round((width // 2) + tx))
             cy = int(round((height * 0.58) + ty))
 
-            _alpha_paste(frame, src_tf, cx, cy)
+            _alpha_paste(frame, src_rs, cx, cy)
+
+            # debug（必要なときだけ有効化してください）
+            # if i % (fps * 2) == 0:
+            #     print(f"[pose] t_ms={t_ms} yaw={yaw:.2f} tx={tx:.2f} ty={ty:.2f} scale={pose_scale:.3f} -> cx={cx} cy={cy} tgt_h={tgt_h}")
 
         if used_fallback:
             fallback_frames += 1
             if first_fallback_ms is None:
                 first_fallback_ms = t_ms
 
+        # ★ ここで per_frame_hook に BGRA フレームを渡す（M3.5 合成など）★
         if per_frame_hook is not None:
             frame = per_frame_hook(frame, t_ms, i)
 
-        # crossfade（旧版互換）
+        # クロスフェード（旧版互換）
         if crossfade_frames > 0 and prev_frame is not None and i % (fps // 2 or 1) == 0:
             for k in range(crossfade_frames):
                 a = (k + 1) / float(crossfade_frames + 1)
@@ -441,7 +401,7 @@ def render_video(
     cap.release()
     writer.release()
 
-    return {
+    summary = {
         "fallback_frames": fallback_frames,
         "first_fallback_ms": first_fallback_ms,
         "views_count": views_count,
@@ -449,12 +409,12 @@ def render_video(
         "fps": int(fps),
         "out_mp4": out_mp4_path,
     }
+    return summary
 
 
-# ============================================================
-# Legacy wrapper (no background video)
-# ============================================================
-
+# ============================================
+# M0 旧I/F互換ラッパー（bg_video不要版）
+# ============================================
 def render_video_legacy(
     out_mp4_path: str,
     width: int,
@@ -467,34 +427,39 @@ def render_video_legacy(
     assets_dir: str,
     atlas_json_rel: str,
     transform_cfg=None,
+    dump_rgba_dir: str | None = None,   # ★追加: PNG保存用のディレクトリパス
 ):
     """
     m0_runner.py が期待している旧 render_video I/F を満たす互換ラッパー。
-    背景MP4は読まず、width/height の空キャンバスにスプライトを貼って MP4 生成。
+    背景MP4は読まず、width/height の空キャンバスにスプライトを貼ってMP4生成する。
     """
+
     atlas_idx = load_atlas_index(atlas_json_rel)
     view_rules = atlas_idx.get("view_rules", {})
 
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
     writer = cv2.VideoWriter(out_mp4_path, fourcc, fps, (width, height))
 
+    # --- dump先ディレクトリ作成 ---
+    if dump_rgba_dir:
+        os.makedirs(dump_rgba_dir, exist_ok=True)
+
     total_frames = int(round(duration_s * fps))
-    step_ms = int(round(1000 / fps))
+    step_ms = int(round(1000 / fps))  # t_msズレ対策（fps=25なら40ms）
 
     fallback_frames = 0
     first_fallback_ms = None
     views_count: Dict[str, int] = {}
 
-    target_h_ratio = float((transform_cfg or {}).get("target_h_ratio", 0.25))
-    cy_base_ratio = float((transform_cfg or {}).get("cy_base_ratio", 0.58))
-
     for i in range(total_frames):
         t_ms = i * step_ms
         vals = merged_value_fn(t_ms) or {}
 
+        # --- mouth/expression ---
         mouth = normalize_mouth_label(str(vals.get("mouth", "closed")))
         expression = vals.get("expression", None)
 
+        # --- pose (deg) ---
         yaw = float(vals.get("yaw", vals.get("yaw_deg", 0.0)))
         pitch = float(vals.get("pitch", vals.get("pitch_deg", 0.0)))
         roll = float(vals.get("roll", vals.get("roll_deg", 0.0)))
@@ -502,6 +467,7 @@ def render_video_legacy(
         view = choose_view_from_yaw(yaw, view_rules)
         views_count[view] = views_count.get(view, 0) + 1
 
+        # --- sprite path resolve ---
         used_fallback = False
         base_path_rel, used_fallback_base = _resolve_base_sprite_path(atlas_idx, view, mouth)
         used_fallback = used_fallback or used_fallback_base
@@ -515,57 +481,70 @@ def render_video_legacy(
                 expression=expression,
                 base_path_rel=base_path_rel,
             )
+
+            # try expression path -> fallback to base
             try:
                 src = _load_rgba(os.path.join(assets_dir, expr_path_rel))
             except FileNotFoundError:
                 try:
                     src = _load_rgba(os.path.join(assets_dir, base_path_rel))
-                    used_fallback = True
+                    used_fallback = True  # 表情が無く normal に落ちた
                 except FileNotFoundError:
                     src = None
                     used_fallback = True
         else:
             used_fallback = True
 
-        # opaque black BGRA
+        # --- background canvas (opaque black BGRA) ---
+        # frame は BGRA のまま作られている（alphaあり）
         frame = np.zeros((height, width, 4), dtype=np.uint8)
-        frame[:, :, 3] = 255
+        frame[:, :, 3] = 0 # 背景を透明にする場合は0、不透明にする場合は255（用途に合わせて）
+        # 元の実装に合わせ、一旦スプライトがない部分は透明、ある部分はアルファ合成するようにします。
+        # もし背景を黒くしたい場合は、最後に 255 で埋めるか paste 前に設定します。
 
         if src is not None:
+            # --- scale (pose scale) ---
+            target_h_ratio = float((transform_cfg or {}).get("target_h_ratio", 0.25))
             tgt_h_base = max(1, int(height * target_h_ratio))
 
             pose_scale = float(vals.get("scale", 1.0))
-            if not np.isfinite(pose_scale):
-                pose_scale = 1.0
-            pose_scale = max(0.2, min(5.0, pose_scale))
+            pose_scale = max(0.5, min(2.0, pose_scale))  # clamp
+            tgt_h = max(1, int(round(tgt_h_base * pose_scale)))
 
-            desired_h = max(1, int(round(tgt_h_base * pose_scale)))
-            scale_total = float(desired_h) / float(max(1, src.shape[0]))
+            resize_ratio = tgt_h / src.shape[0]
+            tgt_w = max(1, int(round(src.shape[1] * resize_ratio)))
+            src_rs = cv2.resize(src, (tgt_w, tgt_h), interpolation=cv2.INTER_AREA)
 
-            src_tf = pose_transform(src, yaw_deg=yaw, pitch_deg=pitch, roll_deg=roll, scale=scale_total)
+            # --- transform (yaw/pitch/roll) ---
+            src_rs = pose_transform(src_rs, yaw_deg=yaw, pitch_deg=pitch, roll_deg=roll)
 
+            # --- tx/ty (clamp) ---
             tx = float(vals.get("tx", 0.0))
             ty = float(vals.get("ty", 0.0))
-            if not np.isfinite(tx):
-                tx = 0.0
-            if not np.isfinite(ty):
-                ty = 0.0
 
             max_tx = width * 0.45
             max_ty = height * 0.45
             tx = max(-max_tx, min(max_tx, tx))
             ty = max(-max_ty, min(max_ty, ty))
 
-            cx = int(round((width * 0.5) + tx))
+            # paste center
+            cy_base_ratio = float((transform_cfg or {}).get("cy_base_ratio", 0.58))
+            cx = int(round((width // 2) + tx))
             cy = int(round((height * cy_base_ratio) + ty))
 
-            _alpha_paste(frame, src_tf, cx, cy)
+            _alpha_paste(frame, src_rs, cx, cy)
 
         if used_fallback:
             fallback_frames += 1
             if first_fallback_ms is None:
                 first_fallback_ms = t_ms
 
+        # --- PNG連番を保存（BGRAのまま） ---
+        if dump_rgba_dir:
+            out_png = os.path.join(dump_rgba_dir, f"{i:08d}.png")
+            cv2.imwrite(out_png, frame)  # 4chならPNGにalphaが入る
+
+        # 既存どおり、mp4にはBGRだけ書く（alphaはmp4には入らない）
         writer.write(frame[:, :, :3])
 
     writer.release()
