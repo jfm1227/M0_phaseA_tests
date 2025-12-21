@@ -3,13 +3,13 @@
   "raw_mp4": "/workspaces/M0_phaseA_tests/tests/out/smoke_pose_improved/video_raw.mp4",
   "fps": 25,
   "step_ms": 40,
-  "duration_s": 38.0,
-  "target_ms": 38000,
-  "target_frames": 950,
+  "duration_s": 37.0,
+  "target_ms": 37000,
+  "target_frames": 925,
   "audio_ms": 36040,
-  "duration_ms": 38000,
-  "audio_delta_ms": -1960,
-  "rendered_frames": 950,
+  "duration_ms": 37000,
+  "audio_delta_ms": -960,
+  "rendered_frames": 925,
   "pose_last_t_ms": 29000,
   "mouth_last_t_ms": 33800,
   "expr_last_t_ms": 90120,
@@ -19,8 +19,8 @@
   "assets_dir": "/workspaces/M0_phaseA_tests/tests/assets_min",
   "assets_dir_effective": "/workspaces/M0_phaseA_tests/tests/assets_min",
   "exp_name": "smoke_pose_improved",
-  "elapsed_s_render": 44.835,
-  "elapsed_s_total": 46.135,
+  "elapsed_s_render": 44.713,
+  "elapsed_s_total": 56.245,
   "axis": "yaw",
   "thr_front_deg": 16.0,
   "map_deg": 30.0,
@@ -30,7 +30,7 @@
     "pos": "right30"
   },
   "view_alias": {},
-  "audio_name_cfg": null,
+  "audio_name_cfg": "/workspaces/M0_phaseA_tests/tests/audio/1_0_72.wav",
   "audio_name_from_mouth": "1_0_72.wav",
   "audio_path": "/workspaces/M0_phaseA_tests/tests/audio/1_0_72.wav",
   "audio_mux_succeeded": true,
@@ -40,8 +40,8 @@
   "first_fallback_ms": null,
   "views_count": {
     "right30": 82,
-    "front": 771,
+    "front": 746,
     "left30": 97
   },
-  "total_frames": 950
+  "total_frames": 925
 }

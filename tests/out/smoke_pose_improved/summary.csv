@@ -1,10 +1,10 @@
 key,value
 exp_name,smoke_pose_improved
-duration_s,38.0
-elapsed_s_render,44.835
-elapsed_s_total,46.135
-target_frames,950
-rendered_frames,950
+duration_s,37.0
+elapsed_s_render,44.713
+elapsed_s_total,56.245
+target_frames,925
+rendered_frames,925
 pose_last_t_ms,29000
 mouth_last_t_ms,33800
 expr_last_t_ms,90120
