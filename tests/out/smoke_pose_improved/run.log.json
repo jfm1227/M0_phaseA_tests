@@ -10,17 +10,17 @@
   "duration_ms": 37000,
   "audio_delta_ms": -960,
   "rendered_frames": 925,
-  "pose_last_t_ms": 29000,
+  "pose_last_t_ms": 24800,
   "mouth_last_t_ms": 33800,
   "expr_last_t_ms": 90120,
-  "pose_n": 726,
+  "pose_n": 621,
   "mouth_n": 846,
   "expr_n": 16,
   "assets_dir": "/workspaces/M0_phaseA_tests/tests/assets_min",
   "assets_dir_effective": "/workspaces/M0_phaseA_tests/tests/assets_min",
   "exp_name": "smoke_pose_improved",
-  "elapsed_s_render": 44.713,
-  "elapsed_s_total": 56.245,
+  "elapsed_s_render": 80.24,
+  "elapsed_s_total": 81.815,
   "axis": "yaw",
   "thr_front_deg": 16.0,
   "map_deg": 30.0,
@@ -39,9 +39,15 @@
   "fallback_frames": 0,
   "first_fallback_ms": null,
   "views_count": {
-    "right30": 82,
-    "front": 746,
-    "left30": 97
+    "front": 701,
+    "left15": 48,
+    "left30": 30,
+    "down7": 8,
+    "left15_down7": 26,
+    "right15": 63,
+    "right30": 49
   },
-  "total_frames": 925
+  "total_frames": 925,
+  "affine_used_frames": 0,
+  "legacy_used_frames": 925
 }

@@ -6,6 +6,7 @@ from pathlib import Path
 import yaml
 import csv
 import wave
+import cv2
 
 # -----------------------------
 # 基本ユーティリティ
@@ -203,7 +204,7 @@ def _import_timeline_and_render():
 # 値マージ・軸適用
 # -----------------------------
 def _build_merged_value_fn(mouth_tl, pose_tl, expr_tl,
-                           value_key: str, thr_front: float, map_deg: float):
+                           value_key: str, thr_front: float, map_deg: float, mode: str = "1d"):
     """
     value_key が yaw 以外（pitch/roll）の場合、擬似yaw（±map_deg or 0）を注入して返す。
 
@@ -230,7 +231,7 @@ def _build_merged_value_fn(mouth_tl, pose_tl, expr_tl,
                 vals["mouth"] = "close"
 
         # --- ここから下は従来どおり（擬似yaw注入） ---
-        if value_key == "yaw":
+        if mode != "1d" or value_key == "yaw":
             return vals
 
         v = None
@@ -314,6 +315,12 @@ def main():
     duration_s  = float(cfg["video"]["duration_s"])
     crossfade   = int(cfg["render"]["crossfade_frames"])
 
+    # [NOTE] 3点アフィン導線は無効化（2D view 検証フェーズでは使用しない）
+    affine_points_yaml_rel = None
+
+    # debug: view overlay（目視確認用）
+    debug_view_overlay = bool((cfg.get("render", {}) or {}).get("debug_view_overlay", False))
+
     # ---- 尺・フレーム数の「正」ログ（ここが最重要）----
     step_ms = int(round(1000.0 / fps))
     target_ms = int(round(duration_s * 1000.0))
@@ -324,6 +331,7 @@ def main():
 
     # メトリクス・切替設定（Option A：alias＋atlas書き換え）
     mconf       = cfg.get("metrics", {}) or {}
+    metrics_mode = str(mconf.get("mode", "1d")).lower()
     value_key   = str(mconf.get("value_key", "yaw"))     # "yaw" / "pitch" / "roll"
     thr_front   = float(mconf.get("thr_front", 16.0))    # ±閾値[deg]
     zero_label  = str(mconf.get("zero_label", "front"))  # ラベル（ログ用）
@@ -469,6 +477,26 @@ def main():
     raw_mp4  = exp_dir / "video_raw.mp4"
     final_mp4 = exp_dir / "demo.mp4"
 
+    # ------------------------------------------------------------
+    # [ADD] FG(BGRA PNG) 連番出力（M3.5用）
+    #    - cfg.render.fg_png_dir があればそれを優先
+    #    - 無ければ out/<exp_name>/fg に出す
+    # ------------------------------------------------------------
+    fg_png_dir_cfg = (cfg.get("render", {}) or {}).get("fg_png_dir")
+    fg_png_dir = Path(fg_png_dir_cfg).resolve() if fg_png_dir_cfg else (exp_dir / "fg")
+    fg_enabled = bool((cfg.get("render", {}) or {}).get("dump_fg_png", True))
+    if fg_enabled:
+        fg_png_dir.mkdir(parents=True, exist_ok=True)
+
+    def _per_frame_hook(frame_bgra, t_ms: int, i: int):
+        # frame_bgra: (H,W,4) uint8 BGRA
+        if not fg_enabled:
+            return frame_bgra
+        out_path = fg_png_dir / f"{i:08d}.png"
+        # OpenCVは BGRA のまま PNG に書ける
+        cv2.imwrite(str(out_path), frame_bgra)
+        return frame_bgra
+
     # assets の有効ディレクトリ（alias適用）
     use_assets_dir = assets_dir
     if value_key != "yaw" and view_alias:
@@ -493,7 +521,8 @@ def main():
     # 値マージ関数（擬似yaw注入）
     merged_value = _build_merged_value_fn(
         mouth_tl, pose_tl, expr_tl,
-        value_key=value_key, thr_front=thr_front, map_deg=map_deg
+        value_key=value_key, thr_front=thr_front, map_deg=map_deg,
+        mode=metrics_mode,
     )
 
     # デバッグ: timeline CSV のダンプ
@@ -547,6 +576,8 @@ def main():
         assets_dir=str(use_assets_dir),
         atlas_json_rel=atlas_json_for_render,
         transform_cfg=transform_cfg,
+        per_frame_hook=_per_frame_hook,
+        debug_view_overlay=debug_view_overlay,
     )
     render_elapsed = round(time.time() - t0, 3)
 

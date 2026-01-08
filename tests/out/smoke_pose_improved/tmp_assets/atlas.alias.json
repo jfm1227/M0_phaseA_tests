@@ -1,0 +1,42 @@
+{
+  "view_rules": {
+    "left30_max_yaw_deg": -12.0,
+    "right30_min_yaw_deg": 12.0
+  },
+  "fallback": {
+    "view": "front",
+    "mouth": "closed"
+  },
+  "expression_labels": [
+    "normal",
+    "smile",
+    "angry",
+    "sad",
+    "blink"
+  ],
+  "expression_default": "normal",
+  "front": {
+    "closed": "front/mouth_close.png",
+    "a": "front/mouth_a.png",
+    "i": "front/mouth_i.png",
+    "u": "front/mouth_u.png",
+    "e": "front/mouth_e.png",
+    "o": "front/mouth_o.png"
+  },
+  "left30": {
+    "closed": "up15/mouth_close.png",
+    "a": "up15/mouth_a.png",
+    "i": "up15/mouth_i.png",
+    "u": "up15/mouth_u.png",
+    "e": "up15/mouth_e.png",
+    "o": "up15/mouth_o.png"
+  },
+  "right30": {
+    "closed": "down15/mouth_close.png",
+    "a": "down15/mouth_a.png",
+    "i": "down15/mouth_i.png",
+    "u": "down15/mouth_u.png",
+    "e": "down15/mouth_e.png",
+    "o": "down15/mouth_o.png"
+  }
+}

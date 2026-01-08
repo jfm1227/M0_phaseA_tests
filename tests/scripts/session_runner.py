@@ -209,6 +209,18 @@ def main() -> int:
     _deep_set(cfg, ("io", "assets_dir"), "tests/assets_min")
     _deep_set(cfg, ("atlas", "atlas_json"), "atlas.min.json")
 
+    # [ADD] affine_points_yaml_rel を ABS 化（out_dir 基準 join の事故を防ぐ）
+    affine_rel = _deep_get(cfg, ("render", "affine_points_yaml_rel"), default=None)
+    if isinstance(affine_rel, str) and affine_rel:
+        ap = Path(affine_rel)
+        affine_abs = ap.resolve() if ap.is_absolute() else (repo_root / ap).resolve()
+        _deep_set(cfg, ("render", "affine_points_yaml_rel"), str(affine_abs))
+    else:
+        # base_config に無い場合でも、標準配置があれば入れておく（任意だが混乱防止に有効）
+        default_ap = (repo_root / "configs" / "affine_points.yaml")
+        if default_ap.exists():
+            _deep_set(cfg, ("render", "affine_points_yaml_rel"), str(default_ap.resolve()))
+
     # FINAL: timelines + audio are ABSOLUTE (avoid any prefix/join ambiguity)
     _deep_set(cfg, ("inputs", "pose_timeline"), str(pose_abs))
     _deep_set(cfg, ("inputs", "mouth_timeline"), str(mouth_abs))

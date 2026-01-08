@@ -1,0 +1,10 @@
+{
+  "schema_version": "session_runtime_v0.1",
+  "session_id": "sess_affine_test",
+  "session_audio_ms": 38000,
+  "pose_timeline": "tests/timelines/pose_timeline_m0_scroll_rivision2.json",
+  "mouth_timeline": "tests/timelines/mouth_timeline_test1.json",
+  "expression_timeline": "tests/timelines/sess_real_01.expression_timeline.json",
+  "audio": "tests/audio/1_0_72.wav"
+
+}
